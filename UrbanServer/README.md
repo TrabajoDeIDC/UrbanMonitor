@@ -19,6 +19,11 @@ You can build the program using:
 go build UrbanServer.go
 ```
 
+and run it using:
+```sh
+./UrbanServer [-test]
+```
+
 ## Production vs debug mode
 
 Either by running the program using go or by building it and running it as a binary, you can set the production mode using `export GIN_MODE=release` and the debug mode using `export GIN_MODE=release`. If you don't specify the mode, the debug mode is set by default.
