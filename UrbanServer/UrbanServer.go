@@ -10,6 +10,8 @@ import (
 	"time"
 	"fmt"
     "strconv"
+	"flag"
+	"os"
 )
 
 // Create struct for GET queries
@@ -31,6 +33,17 @@ type DebugData struct {
 	Noise       float64 `json:"noise"`
 }
 
+// Global variables
+var (
+	createData *sql.Stmt
+	createDebugData *sql.Stmt
+	readTempData *sql.Stmt
+	readHumidityData *sql.Stmt
+	readAirData *sql.Stmt
+	readNoiseData *sql.Stmt
+	db *sql.DB
+)
+
 func dataGenerator() []DebugData {
 	var data []DebugData
 
@@ -42,12 +55,13 @@ func dataGenerator() []DebugData {
 	minLongitud := -0.45
 	maxLongitud := -0.32
 
-	for i := 0; i < 1000; i++ {
+	log.Print("Generating test data")
+	for i := 0; i < 10000; i++ {
 		latitud := rand.Float64()*(maxLatitud-minLatitud) + minLatitud
 		longitud := rand.Float64()*(maxLongitud-minLongitud) + minLongitud
 
-		// Generate random date from two months ago to now
-		timestamp := time.Now().Add(-time.Duration(rand.Intn(60*24*60*60)) * time.Second).Format("2006-01-02 15:04:05")
+		// Generate random date from five days ago to now
+		timestamp := time.Now().Add(-time.Duration(rand.Intn(60*24*60*5)) * time.Second).Format("2006-01-02 15:04:05")
 
 		// Generate random temperature, humidity, air quality and noise values
 		temp := rand.Float64() * 40.0 // Between 0 and 40 Celsius
@@ -68,19 +82,11 @@ func dataGenerator() []DebugData {
 		data = append(data, dato)
 	}
 
-	return datos
+	return data
 }
 
-func main() {
-	// Initialize database
-	db, err := sql.Open("sqlite3", "test.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
-	// Creating table Data
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS Data (" +
+func createTableData () {
+	_, err := db.Exec("CREATE TABLE IF NOT EXISTS Data (" +
 		"id INTEGER PRIMARY KEY AUTOINCREMENT," +
 		"Latitud FLOAT DEFAULT 0," +
 		"Longitud FLOAT DEFAULT 0," +
@@ -92,41 +98,93 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not create table Data: ", err)
 	}
+}
 
+func initStatements () {
 	// Preparing CRUD statements (only Create and Read)
-	createData, err := db.Prepare("INSERT INTO Data(Latitud, Longitud, Temperature, Humidity, AirQuality, Noise) VALUES (?, ?, ?, ?, ?, ?)")
+	var err error
+	createData, err = db.Prepare("INSERT INTO Data(Latitud, Longitud, Temperature, Humidity, AirQuality, Noise) VALUES (?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		log.Fatal("Could not prepare Data Creation: ", err)
 	}
-	createDebugData, err := db.Prepare("INSERT INTO Data(Latitud, Longitud, Timestamp, Temperature, Humidity, AirQuality, Noise) VALUES (?, ?, ?, ?, ?, ?, ?)")
+	createDebugData, err = db.Prepare("INSERT INTO Data(Latitud, Longitud, Timestamp, Temperature, Humidity, AirQuality, Noise) VALUES (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		log.Fatal("Could not prepare debug Data Creation: ", err)
 	}
-	readTempData, err := db.Prepare("SELECT Latitud, Longitud, Timestamp, Temperature FROM Data WHERE Timestamp BETWEEN ? AND ?")
+	readTempData, err = db.Prepare("SELECT Latitud, Longitud, Timestamp, Temperature FROM Data WHERE Timestamp BETWEEN ? AND ?")
 	if err != nil {
 		log.Fatal("Could not prepare temp data Read: ", err)
 	}
-	readHumidityData, err := db.Prepare("SELECT Latitud, Longitud, Timestamp, Humidity FROM Data WHERE Timestamp BETWEEN ? AND ?")
+	readHumidityData, err = db.Prepare("SELECT Latitud, Longitud, Timestamp, Humidity FROM Data WHERE Timestamp BETWEEN ? AND ?")
 	if err != nil {
 		log.Fatal("Could not prepare humidity data Read: ", err)
 	}
-	readAirData, err := db.Prepare("SELECT Latitud, Longitud, Timestamp, AirQuality FROM Data WHERE Timestamp BETWEEN ? AND ?")
+	readAirData, err = db.Prepare("SELECT Latitud, Longitud, Timestamp, AirQuality FROM Data WHERE Timestamp BETWEEN ? AND ?")
 	if err != nil {
 		log.Fatal("Could not prepare air quality data Read: ", err)
 	}
-	readNoiseData, err := db.Prepare("SELECT Latitud, Longitud, Timestamp, Noise FROM Data WHERE Timestamp BETWEEN ? AND ?")
+	readNoiseData, err = db.Prepare("SELECT Latitud, Longitud, Timestamp, Noise FROM Data WHERE Timestamp BETWEEN ? AND ?")
 	if err != nil {
 		log.Fatal("Could not prepare noise data Read: ", err)
 	}
+}
 
-	// Test Data
+func initDB () {
+	var err error
+
+	// Initialize DB
+	db, err = sql.Open("sqlite3", "urban.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create table Data
+	createTableData()
+	initStatements()
+}
+
+func initTestDB () {
+	var err error
+
+	// Erase old test DB
+	err = os.Remove("test.db")
+	if (err != nil && !os.IsNotExist(err)) {
+        log.Fatal("Could not remove existing database: ", err)
+    }
+
+	// Initialize DB
+	db, err = sql.Open("sqlite3", "test.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create table Data
+	createTableData()
+	initStatements()
+
+	// Generate data for testing purposes
 	data := dataGenerator();
 	for _, d := range data {
 		_, err := createDebugData.Exec(d.Latitud, d.Longitud, d.Timestamp, d.Temperature, d.Humidity, d.AirQuality, d.Noise)
 		if err != nil {
-			log.Print("Could not insert Debug Data(", d, err)
+			log.Print("Could not insert Debug Data: ", d, err)
 		}
 	}
+}
+
+func main() {
+	// Prepare parser
+	test := flag.Bool("test", false, "Generate random data for testing purposes")
+
+	flag.Parse()
+
+	if (*test) {
+		log.Print("Initializing in TEST mode")
+		initTestDB()
+	} else {
+		initDB()
+	}
+	defer db.Close()
 	
 	// Create and configure Gin instance and its routes
 	r := gin.Default()
