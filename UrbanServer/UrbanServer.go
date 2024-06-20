@@ -198,7 +198,7 @@ func main() {
 
 	// Define route to handle POST queries
 	r.POST("/data", func(c *gin.Context) {
-		_, err := createData.Exec(c.Query("Longitud"), c.Query("lat"), c.Query("lng"), c.Query("humidity"), c.Query("air"), c.Query("noise"))
+		_, err := createData.Exec(c.Query("lat"), c.Query("lng"), c.Query("temp"), c.Query("humidity"), c.Query("air"), c.Query("noise"))
 		if err != nil {
 			log.Print("Could not create data: ", err)
 			c.JSON(http.StatusBadRequest, "error: Could not create data")
